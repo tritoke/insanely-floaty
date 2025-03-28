@@ -1,27 +1,109 @@
-#![feature(unboxed_closures, fn_traits)]
+#![feature(unboxed_closures, fn_traits, slice_as_chunks)]
 #![allow(
     non_snake_case,
-    non_camel_case_types,
-    mixed_script_confusables,
     clippy::upper_case_acronyms,
     clippy::large_types_passed_by_value
 )]
 
-use std::{mem, sync::LazyLock};
+use std::{
+    fs::{self, File},
+    io::{self, Read},
+    mem,
+    sync::LazyLock,
+};
 
 fn main() {
-    let key = bytes2state([
-        43, 126, 21, 22, 40, 174, 210, 166, 171, 247, 21, 136, 9, 207, 79, 60,
-    ]);
-    let pt = bytes2state([
-        50, 67, 246, 168, 136, 90, 48, 141, 49, 49, 152, 162, 224, 55, 7, 52,
-    ]);
-    let ct = [
-        57, 37, 132, 29, 2, 220, 9, 251, 220, 17, 133, 151, 25, 106, 11, 50,
-    ];
+    let key = random_block();
+    let token = random_bytes(24);
+    let ct = enc(token, key);
+    print_ct("Oh s#!\" I encryted my token", &ct);
+    println!("Please help me get my token back, I'll even give you a flag!");
 
-    let ciphertext = state2bytes(AES(pt, key));
-    assert_eq!(ct, ciphertext);
+    let mut lines = io::stdin().lines().map(Result::ok);
+    loop {
+        println!("Gimme gimme a token after midnight: ");
+        let line = lines.next().flatten().expect("No token??? 😭😭😭");
+
+        let parsed = line
+            .trim()
+            .strip_suffix(']')
+            .and_then(|s| s.strip_prefix('['))
+            .and_then(|s| s.split(',').map(|num| num.trim().parse().ok()).collect())
+            .and_then(|f: Vec<_>| {
+                let (chunks, remainder) = f.as_chunks();
+                remainder.is_empty().then(|| chunks.to_owned())
+            });
+
+        let Some(floats) = parsed else {
+            println!("What was that???");
+            continue;
+        };
+
+        let fct = enc(floats, key);
+        if fct == ct {
+            let flag = flag();
+            println!("OMG THANK YOU, heres your flag: {flag}");
+            break;
+        }
+
+        print_ct("No thats", &fct);
+        println!("Do better next time...");
+    }
+    // assert_eq!(ct, ciphertext);
+}
+
+#[allow(clippy::transmute_ptr_to_ptr)]
+fn enc(mut pt: Vec<ByteFloat>, key: StateFloat) -> Vec<StateFloat> {
+    pad(&mut pt);
+    let chunks = unsafe {
+        // this is actually sound!, slices can be transmuted IFF their elements have the same size
+        // the padding also ensures the length is a multiple of the block size
+        mem::transmute::<&[[ByteFloat; 16]], &[StateFloat]>(pt.as_chunks_unchecked()).to_vec()
+    };
+
+    chunks.iter().map(|block| AES(*block, key)).collect()
+}
+
+// idea: meme names based off of neural nets
+fn random_bytes(n: usize) -> Vec<ByteFloat> {
+    let mut bytes = vec![0u8; n];
+    let mut urandom = File::open("/dev/urandom").unwrap();
+    urandom.read_exact(&mut bytes).unwrap();
+    bytes.into_iter().map(Byte2Float).collect()
+}
+
+fn random_block() -> StateFloat {
+    let mut block = [0u8; 16];
+    let mut urandom = File::open("/dev/urandom").unwrap();
+    urandom.read_exact(&mut block).unwrap();
+    bytes2state(block)
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn pad(msg: &mut Vec<ByteFloat>) {
+    let pad = 16 - (msg.len() % 16);
+    msg.resize(msg.len() + pad, Byte2Float(pad as u8));
+}
+
+fn flag() -> String {
+    fs::read_to_string("flag.txt").unwrap_or("flag{testing_flag}".to_owned())
+}
+
+fn print_ct(msg: &str, blocks: &[StateFloat]) {
+    print!("{msg}: [");
+    let mut first = true;
+    for block in blocks {
+        for b in block {
+            if first {
+                first = false;
+            } else {
+                print!(", ");
+            }
+
+            print!("{b:.1}");
+        }
+    }
+    println!("]");
 }
 
 fn ReLU(x: f64) -> f64 {
@@ -67,7 +149,7 @@ struct Continuation<const K: usize> {
 
 impl<const K: usize> Continuation<K> {
     fn new(f: impl Fn([bool; K]) -> bool) -> Self {
-        let c = 0.5;
+        let c = 1.0;
 
         // identify the corners of f
         let mut corners: Vec<Corner<K>> = vec![];
@@ -159,10 +241,6 @@ type StateFloat = [f64; 128];
 
 fn bytes2state(bytes: [u8; 16]) -> StateFloat {
     unsafe { mem::transmute::<[ByteFloat; 16], StateFloat>(bytes.map(Byte2Float)) }
-}
-
-fn state2bytes(state: StateFloat) -> [u8; 16] {
-    unsafe { mem::transmute::<StateFloat, [ByteFloat; 16]>(state).map(FloatToByte) }
 }
 
 fn AddRoundKey(p: StateFloat, k: StateFloat) -> StateFloat {
@@ -386,7 +464,6 @@ fn SubWord(word: WordFloat) -> WordFloat {
 
 fn RotWord(word: WordFloat) -> WordFloat {
     let [a, b, c, d] = word;
-    // [d, a, b, c]
     [b, c, d, a]
 }
 
@@ -402,22 +479,6 @@ fn Byte2Float(b: u8) -> ByteFloat {
     if (b & (1 << 5)) == 1 << 5 { byte[2] = 1.0 }
     if (b & (1 << 6)) == 1 << 6 { byte[1] = 1.0 }
     if (b & (1 << 7)) == 1 << 7 { byte[0] = 1.0 }
-
-    byte
-}
-
-#[rustfmt::skip]
-fn FloatToByte(b: ByteFloat) -> u8 {
-    let mut byte = 0;
-
-    if b[7] >= 1.0 { byte |= 1 << 0 }
-    if b[6] >= 1.0 { byte |= 1 << 1 }
-    if b[5] >= 1.0 { byte |= 1 << 2 }
-    if b[4] >= 1.0 { byte |= 1 << 3 }
-    if b[3] >= 1.0 { byte |= 1 << 4 }
-    if b[2] >= 1.0 { byte |= 1 << 5 }
-    if b[1] >= 1.0 { byte |= 1 << 6 }
-    if b[0] >= 1.0 { byte |= 1 << 7 }
 
     byte
 }
@@ -638,7 +699,7 @@ mod tests {
     fn test_mul3() {
         #[rustfmt::skip]
         let mul3_table = [
-            0x00, 0x03, 0x06, 0x05, 0x0c, 0x0f, 0x0a, 0x09, 0x18, 0x1b, 0x1e, 0x1d, 0x14, 0x17, 0x12, 0x11,
+            0x01, 0x03, 0x06, 0x05, 0x0c, 0x0f, 0x0a, 0x09, 0x18, 0x1b, 0x1e, 0x1d, 0x14, 0x17, 0x12, 0x11,
             0x30, 0x33, 0x36, 0x35, 0x3c, 0x3f, 0x3a, 0x39, 0x28, 0x2b, 0x2e, 0x2d, 0x24, 0x27, 0x22, 0x21,
             0x60, 0x63, 0x66, 0x65, 0x6c, 0x6f, 0x6a, 0x69, 0x78, 0x7b, 0x7e, 0x7d, 0x74, 0x77, 0x72, 0x71,
             0x50, 0x53, 0x56, 0x55, 0x5c, 0x5f, 0x5a, 0x59, 0x48, 0x4b, 0x4e, 0x4d, 0x44, 0x47, 0x42, 0x41,
