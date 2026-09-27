@@ -5,3 +5,6 @@ edition = "2024"
 
 [dev-dependencies]
 hex-literal = "1.0.0"
+
+[profile.release]
+strip = false

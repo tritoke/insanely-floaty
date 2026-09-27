@@ -1,21 +1,27 @@
 #!/usr/bin/env python
 
-import pwn
 import ast
+
+import pwn
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 
 pwn.context.timeout = 1
 
-io = pwn.process("target/release/insanely-floaty")
+io = pwn.process("./insanely-floaty")
+# io = pwn.remote("127.0.0.1", 1337)
 io.recvuntil(b"token: ")
 token_ct_floats = ast.literal_eval(io.recvline().strip().decode())
-token_ct = int("".join("1" if x == 1.0 else "0" for x in token_ct_floats), 2).to_bytes(32, "big")
+token_ct = int("".join("1" if x == 1.0 else "0" for x in token_ct_floats), 2).to_bytes(
+    32, "big"
+)
+
 
 def enc(io, pt: list[float]) -> list[float]:
     io.sendlineafter(b"midnight:", f"{pt}".encode())
     io.readuntil(b"thats: ")
     return ast.literal_eval(io.readline().strip().decode())
+
 
 epsilon = 0.01
 key_bits = [False] * 128

@@ -49,7 +49,6 @@ fn main() {
         print_ct("No thats", &fct);
         println!("Do better next time...");
     }
-    // assert_eq!(ct, ciphertext);
 }
 
 #[allow(clippy::transmute_ptr_to_ptr)]
