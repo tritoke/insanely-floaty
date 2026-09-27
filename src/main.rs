@@ -1,4 +1,4 @@
-#![feature(unboxed_closures, fn_traits, slice_as_chunks)]
+#![feature(unboxed_closures, fn_traits)]
 #![allow(
     non_snake_case,
     clippy::upper_case_acronyms,
@@ -16,7 +16,7 @@ fn main() {
     let key = random_block();
     let token = random_bytes(24);
     let ct = enc(token, key);
-    print_ct("Oh s#!\" I encryted my token", &ct);
+    print_ct("Oh s#!\" I encrypted my token", &ct);
     println!("Please help me get my token back, I'll even give you a flag!");
 
     let mut lines = io::stdin().lines().map(Result::ok);
@@ -100,7 +100,7 @@ fn print_ct(msg: &str, blocks: &[StateFloat]) {
                 print!(", ");
             }
 
-            print!("{b:.1}");
+            print!("{b}");
         }
     }
     println!("]");
