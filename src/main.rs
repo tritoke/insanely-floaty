@@ -99,12 +99,13 @@ fn print_ct(msg: &str, blocks: &[StateFloat]) {
                 print!(", ");
             }
 
-            print!("{b}");
+            print!("{b:.1}");
         }
     }
     println!("]");
 }
 
+#[inline(never)]
 fn ReLU(x: f64) -> f64 {
     f64::max(0.0, x)
 }
