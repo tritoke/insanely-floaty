@@ -21,7 +21,7 @@ fn main() {
 
     let mut lines = io::stdin().lines().map(Result::ok);
     loop {
-        println!("Gimme gimme a token after midnight: ");
+        println!("Gimme gimme gimme a token after midnight: ");
         let line = lines.next().flatten().expect("No token??? 😭😭😭");
 
         let parsed = line
